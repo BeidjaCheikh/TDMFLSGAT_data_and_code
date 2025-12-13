@@ -1,9 +1,11 @@
 
+
 if __name__ == '__main__':
     import sys
     sys.path.append(r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data')
     import matplotlib.pyplot as plt
     import seaborn as sns
+    import pickle
     import torch
     from utils import load_data_with_smiles, set_seed, load_fp
     from torch.utils.data import DataLoader
@@ -18,7 +20,7 @@ if __name__ == '__main__':
     set_seed(SEED)
 
     # Chargement CSV SMILES
-    path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/Internal dataset/Smiles.csv'
+    path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/External dataset/train_validation_cardio_tox_data.csv'
     data = pd.read_csv(path)
     smiles_list = data['smiles'].tolist()
 
@@ -27,10 +29,10 @@ if __name__ == '__main__':
 
     X, A, mogen_fp, labels, smiles_tokens = load_data_with_smiles(path, smiles_utils)
 
-    PubchemFP881_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/Internal dataset/FPs/PubchemFP881.csv'
-    Topological_torsion_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/Internal dataset/FPs/topological_torsion_fingerprints.csv'
-    APC2D780_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/Internal dataset/FPs/APC2D780.csv'
-    KR_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/Internal dataset/FPs/KR.csv'
+    PubchemFP881_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/External dataset/FPs/PubchemFP881.csv'
+    Topological_torsion_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/External dataset/FPs/TopologicalTorsion1024.csv'
+    APC2D780_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/External dataset/FPs/APC2D780.csv'
+    KR_path = r'/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/External dataset/FPs/KRFP.csv'
 
     fp1 = torch.FloatTensor(load_fp(PubchemFP881_path))
     fp2 = torch.FloatTensor(load_fp(Topological_torsion_path))
@@ -44,7 +46,7 @@ if __name__ == '__main__':
     labels = torch.FloatTensor(labels)
 
     # Split train/test
-    split_idx = 8284  # À ajuster si besoin
+    split_idx = 10096  # À ajuster si besoin
     train_dataset = MyDataset(
         smiles_tokens=smiles_tokens[:split_idx],
         f=mogen_fp[:split_idx],
@@ -120,6 +122,18 @@ if __name__ == '__main__':
             auc_score = roc_auc_score(true_y, pred_y)
             print('[TRAIN] Accuracy:', round(acc, 3))
             print('[TRAIN] AUC:', round(auc_score, 3))
+
+    MODEL_PATH = "/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/External dataset/tdmf_lsgat_internal.pth"
+    SMILES_UTILS_PATH = "/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/graph/Dataset/External dataset/smiles_utils.pkl"
+
+    # 1) Sauvegarder les poids du modèle
+    torch.save(model.state_dict(), MODEL_PATH)
+    print(f"✅ Modèle sauvegardé dans {MODEL_PATH}")
+
+    # 2) Sauvegarder l'objet smiles_utils (tokenizer SMILES)
+    with open(SMILES_UTILS_PATH, "wb") as f:
+        pickle.dump(smiles_utils, f)
+    print(f"✅ smiles_utils sauvegardé dans {SMILES_UTILS_PATH}")
 
     # Affichage de la courbe loss
     plt.figure(figsize=(7,5))
@@ -198,6 +212,9 @@ if __name__ == '__main__':
     print(f"Positive Predictive Value (PPV): {PPV:.3f}")
     print(f"Matthews Correlation Coefficient (MCC): {MCC:.3f}")
     
+    torch.save(model.state_dict(), "tdmflsgat_internal_best.pth")
+    print("✅ Modèle sauvegardé sous : tdmflsgat_internal_best.pth")
+
     # Matrice de confusion
     plt.figure(figsize=(6, 5))
     sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',

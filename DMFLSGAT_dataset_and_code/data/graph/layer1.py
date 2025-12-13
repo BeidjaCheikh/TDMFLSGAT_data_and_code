@@ -1,22 +1,19 @@
-# layer.py
+# layer1.py
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class LSGATLayer(nn.Module):
+class GraphAttentionLayer(nn.Module):
     """
-    LSGAT : Layer-wise Self-Adaptive Graph Attention Network (Su et al., 2024)
+    Simple GAT layer, similar to https://arxiv.org/abs/1710.10903
     """
-    def __init__(self, in_features=65, out_features=32, dropout=0.5,
-                 alpha=0.2, concat=True, beta=0.6, layer_id=1):
-        super(LSGATLayer, self).__init__()
+    def __init__(self, in_features=65, out_features=65, dropout=0.5, alpha=0.2, concat=True):
+        super(GraphAttentionLayer, self).__init__()
         self.dropout = dropout
         self.in_features = in_features
         self.out_features = out_features
         self.alpha = alpha
         self.concat = concat
-        self.beta = beta
-        self.layer_id = layer_id
 
         self.W = nn.Parameter(torch.empty(size=(in_features, out_features)))
         nn.init.xavier_uniform_(self.W.data, gain=1.414)
@@ -25,42 +22,23 @@ class LSGATLayer(nn.Module):
 
         self.leakyrelu = nn.LeakyReLU(self.alpha)
 
-        # ➕ pour l’analyse : on stockera ici l’attention (N×N) après softmax
+        # ➕ pour l’analyse
         self.last_attention = None
 
     def forward(self, h, adj):
-        # h : (N, in_features)
+        # h.shape: (N, in_features)
         Wh = torch.mm(h, self.W)  # (N, out_features)
         e = self._prepare_attentional_mechanism_input(Wh)  # (N, N)
-
-        # == Calcul overlap-degree et scaling score ==
-        N = adj.shape[0]
-        device = adj.device
-        A_power = torch.matrix_power(adj + torch.eye(N, device=device), self.layer_id)
-        overlap_degree = A_power.sum(dim=0)   # (N,)
-
-        tau = torch.quantile(overlap_degree, self.beta)
-        scaled_overlap = overlap_degree / (tau + 1e-8)
-        scaling_score = torch.where(
-            scaled_overlap <= 1,
-            torch.ones_like(scaled_overlap),
-            1 / scaled_overlap
-        )  # (N,)
-
-        # Injection du scaling sur la colonne cible j
-        e = e * scaling_score.unsqueeze(0)  # (N, N)
 
         zero_vec = -9e15 * torch.ones_like(e)
         attention = torch.where(adj > 0, e, zero_vec)
 
-        # ⚠️ On sépare LeakyReLU et softmax pour pouvoir stocker l’attention proprement
-        attention = self.leakyrelu(attention)
+        # GAT classique : LeakyReLU déjà appliqué dans _prepare, donc softmax direct
         attention = F.softmax(attention, dim=1)
 
-        # ➕ Sauvegarde pour analyse (sans dropout)
+        # ➕ Sauvegarde pour analyse
         self.last_attention = attention.detach().cpu()
 
-        # Dropout normal pour l’entraînement
         attention = F.dropout(attention, self.dropout, training=self.training)
         h_prime = torch.matmul(attention, Wh)
 
@@ -70,10 +48,11 @@ class LSGATLayer(nn.Module):
             return h_prime
 
     def _prepare_attentional_mechanism_input(self, Wh):
+        # Wh.shape (N, out_features)
         Wh1 = torch.matmul(Wh, self.a[:self.out_features, :])
         Wh2 = torch.matmul(Wh, self.a[self.out_features:, :])
-        e = Wh1 + Wh2.T  # (N, N)
-        return e
+        e = Wh1 + Wh2.T
+        return self.leakyrelu(e)  # LeakyReLU ici
 
     def __repr__(self):
         return self.__class__.__name__ + f' ({self.in_features} -> {self.out_features})'

@@ -47,7 +47,18 @@ class GraphUtils():
         adj = []
         maxNumAtoms = 100
         for smile in smiles:
-            iMol = Chem.MolFromSmiles(smile)
+            # Nettoyer les charges formelles pour RDKit
+            smile_clean = self.clean_smiles(smile)
+            iMol = Chem.MolFromSmiles(smile_clean)
+            
+            if iMol is None:
+                # Si la molécule ne peut pas être parsée, créer des matrices vides
+                iFeature = np.zeros((maxNumAtoms, 65))
+                iAdj = np.zeros((maxNumAtoms, maxNumAtoms))
+                features.append(iFeature)
+                adj.append(iAdj)
+                continue
+                
             iAdjTmp = Chem.rdmolops.GetAdjacencyMatrix(iMol)
 
             iFeature = np.zeros((maxNumAtoms, 65))
@@ -66,6 +77,12 @@ class GraphUtils():
         features = np.asarray(features)
         adj = np.asarray(adj)
         return features, adj
+
+    def clean_smiles(self, smile):
+        """Nettoie les SMILES en gérant les charges formelles"""
+        # Remplacer les charges formelles courantes
+        cleaned = smile.replace('[N+]', 'N').replace('[n+]', 'n')
+        return cleaned
 
     def atom_feature(self, atom):
         return np.array(self.one_of_k_encoding_unk(atom.GetSymbol(),
@@ -119,27 +136,35 @@ class SmilesUtils():
         return torch.tensor(padded)
 
 def load_data_with_smiles(path, smiles_utils):
+
     data = pd.read_csv(path)
     smiles = list(data['smiles'])
     labels = list(data['labels'])
     utils = GraphUtils()
     X, A = utils.preprocess_smile(smiles)
     smiles_tokens = smiles_utils.tokenize_smiles(smiles)
+
+    # Mogen fingerPrints
     fs = []
-    for smile in smiles:
-        mol = Chem.MolFromSmiles(smile)
+    for i in range(len(smiles)):
+        mol = Chem.MolFromSmiles(smiles[i])
         fp = AllChem.GetMorganFingerprintAsBitVect(mol, 2, nBits=1024)
         fs.append(np.array(fp))
+
     mogen_fp = np.array(fs)
+
     f_sum = mogen_fp.sum(axis=-1)
-    mogen_fp = mogen_fp / (np.reshape(f_sum, (-1, 1)))
-    return X, A, mogen_fp, labels, smiles_tokens
+    mogen_fp = mogen_fp/(np.reshape(f_sum, (-1, 1)))
+
+    return  X, A, mogen_fp, labels, smiles_tokens
 
 def load_fp(path):
     data = pd.read_csv(path)
+
     features = data.values
     f_sum = features.sum(axis=-1)
     features = features / (np.reshape(f_sum, (-1, 1)))
+
     return features
 
 class MyDataset(Dataset):
@@ -160,3 +185,25 @@ class MyDataset(Dataset):
     def __getitem__(self, index):
         return (self.smiles_tokens[index], self.f[index], self.f1[index], self.f2[index],
                     self.f3[index], self.f4[index], self.X[index], self.A[index], self.label[index])
+
+# Exemple d'utilisation
+if __name__ == "__main__":
+    # Initialiser le tokenizer
+    smiles_utils = SmilesUtils()
+    
+    # Charger les données d'entraînement pour le tokenizer
+    train_data = pd.read_csv("/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/external_test_set_new.csv")
+    smiles_list = list(train_data['smiles'])
+    
+    # Entraîner le tokenizer
+    smiles_utils.train_tokenizer(smiles_list)
+    
+    # Charger les features
+    X, A, mogen_fp, labels, smiles_tokens = load_data_with_smiles("/home/enset/Téléchargements/DMFGAM_data_and_code12/DMFGAM数据集及代码/data/external_test_set_new.csv", smiles_utils)
+    
+    print(f"Dataset chargé avec succès:")
+    print(f"  - Features graphiques X: {X.shape}")
+    print(f"  - Matrices d'adjacence A: {A.shape}")
+    print(f"  - Fingerprints: {mogen_fp.shape}")
+    print(f"  - Tokens SMILES: {smiles_tokens.shape}")
+    print(f"  - Labels: {len(labels)}")

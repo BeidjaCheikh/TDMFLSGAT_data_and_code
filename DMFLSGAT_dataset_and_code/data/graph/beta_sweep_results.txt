@@ -1,0 +1,8 @@
+Sensitivity Analysis of LSGAT beta
+=================================
+
+beta=0.2 | thr=0.5290 | ACC=0.820 | AUC=0.895 | SEN=0.833 | SPE=0.803 | PPV=0.839 | NPV=0.795 | MCC=0.635
+beta=0.4 | thr=0.5502 | ACC=0.817 | AUC=0.896 | SEN=0.824 | SPE=0.808 | PPV=0.841 | NPV=0.788 | MCC=0.631
+beta=0.6 | thr=0.4953 | ACC=0.823 | AUC=0.896 | SEN=0.848 | SPE=0.792 | PPV=0.834 | NPV=0.808 | MCC=0.641
+beta=0.8 | thr=0.5450 | ACC=0.817 | AUC=0.895 | SEN=0.821 | SPE=0.811 | PPV=0.843 | NPV=0.786 | MCC=0.630
+beta=1.0 | thr=0.5860 | ACC=0.816 | AUC=0.896 | SEN=0.807 | SPE=0.827 | PPV=0.852 | NPV=0.776 | MCC=0.631
